@@ -26,6 +26,7 @@ module.exports = {
         SERVER_HOST: '127.0.0.1',
         SERVER_PORT: '7480',
         SERVER_URL: 'http://127.0.0.1:7480',
+        SHUTDOWN_TIMEOUT_MS: '25000',
         SERVER_DISABLE_DOCS: 'true',
         SERVER_DISABLE_MANAGER: 'true',
         CORS_ORIGIN: 'https://app.simpliweb.com.br',

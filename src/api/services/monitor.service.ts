@@ -39,8 +39,43 @@ export class WAMonitoringService {
   private readonly logger = new Logger('WAMonitoringService');
   public readonly waInstances: Record<string, any> = {};
   private readonly delInstanceTimeouts: Record<string, NodeJS.Timeout> = {};
+  private shuttingDown = false;
 
   private readonly providerSession: ProviderSession;
+
+  public get isShuttingDown() {
+    return this.shuttingDown;
+  }
+
+  public async shutdown() {
+    if (this.shuttingDown) {
+      return;
+    }
+
+    this.shuttingDown = true;
+
+    const instances = Object.entries(this.waInstances);
+    for (const [instanceName] of instances) {
+      this.clearDelInstanceTime(instanceName);
+    }
+
+    const results = await Promise.allSettled(
+      instances.map(async ([instanceName, instance]) => {
+        try {
+          instance?.client?.ws?.close();
+          await instance?.client?.end?.(new Error('Application shutdown'));
+        } finally {
+          this.logger.info(`Instance "${instanceName}" - socket closed for shutdown`);
+        }
+      }),
+    );
+
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        this.logger.warn(`Baileys shutdown failed: ${result.reason}`);
+      }
+    }
+  }
 
   public delInstanceTime(instance: string) {
     const time = this.configService.get<DelInstance>('DEL_INSTANCE');

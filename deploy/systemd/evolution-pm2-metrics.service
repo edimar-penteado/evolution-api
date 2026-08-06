@@ -1,0 +1,12 @@
+[Unit]
+Description=Publish Evolution API PM2 metrics to CloudWatch
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=simpliweb
+Group=simpliweb
+WorkingDirectory=/srv/evolution-api/current
+EnvironmentFile=/etc/simpliweb/evolution-monitoring.env
+ExecStart=/bin/sh -c 'exec "$NODE_BIN" /srv/evolution-api/current/deploy/monitoring/publish-pm2-metrics.cjs'

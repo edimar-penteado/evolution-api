@@ -51,6 +51,24 @@ class Redis {
       return this.client;
     }
   }
+
+  async close() {
+    if (!this.client) {
+      return;
+    }
+
+    try {
+      if (this.client.isOpen) {
+        await this.client.quit();
+      }
+    } catch (error) {
+      this.logger.warn(`redis graceful shutdown failed: ${error}`);
+      this.client.disconnect();
+    } finally {
+      this.client = null;
+      this.connected = false;
+    }
+  }
 }
 
 export const redisClient = new Redis();

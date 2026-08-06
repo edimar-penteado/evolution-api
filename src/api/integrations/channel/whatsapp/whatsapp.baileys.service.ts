@@ -423,10 +423,19 @@ export class BaileysStartupService extends ChannelStartupService {
       };
     }
 
+    if (connection === 'close' && waMonitor.isShuttingDown) {
+      this.logger.info(`Instance "${this.instance.name}" - reconnection skipped during shutdown`);
+      return;
+    }
+
     if (connection === 'close') {
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
       const codesToNotReconnect = [DisconnectReason.loggedOut, DisconnectReason.forbidden, 402, 406];
       const shouldReconnect = !codesToNotReconnect.includes(statusCode);
+      this.logger.warn(
+        `WhatsApp connection closed: instance="${this.instance.name}" statusCode=${statusCode ?? 'unknown'} reconnect=${shouldReconnect}`,
+      );
+
       if (shouldReconnect) {
         await this.connectToWhatsapp(this.phoneNumber);
       } else {

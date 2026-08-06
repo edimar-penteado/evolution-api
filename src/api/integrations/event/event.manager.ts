@@ -112,6 +112,15 @@ export class EventManager {
     this.kafka.init();
   }
 
+  public async cleanup(): Promise<void> {
+    await Promise.allSettled([
+      this.websocket.cleanup(),
+      this.rabbitmq.cleanup(),
+      this.nats.cleanup(),
+      this.kafka.cleanup(),
+    ]);
+  }
+
   public async emit(eventData: {
     instanceName: string;
     origin: string;

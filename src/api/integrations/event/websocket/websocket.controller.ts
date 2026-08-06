@@ -108,6 +108,15 @@ export class WebsocketController extends EventController implements EventControl
     return this.io;
   }
 
+  public async cleanup(): Promise<void> {
+    if (!this.io) {
+      return;
+    }
+
+    await new Promise<void>((resolve) => this.io.close(() => resolve()));
+    this.io = null;
+  }
+
   public async emit({
     instanceName,
     origin,

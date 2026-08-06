@@ -160,4 +160,19 @@ export class NatsController extends EventController implements EventControllerIn
       }
     }
   }
+
+  public async cleanup(): Promise<void> {
+    if (!this.natsClient) {
+      return;
+    }
+
+    try {
+      await this.natsClient.drain();
+    } catch (error) {
+      this.logger.warn(`Failed to drain NATS connection: ${error}`);
+      this.natsClient.close();
+    } finally {
+      this.natsClient = null;
+    }
+  }
 }

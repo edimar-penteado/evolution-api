@@ -6,6 +6,7 @@ import { ProviderFiles } from '@api/provider/sessions';
 import { PrismaRepository } from '@api/repository/repository.service';
 import { HttpStatus, router } from '@api/routes/index.router';
 import { eventManager, waMonitor } from '@api/server.module';
+import { redisClient } from '@cache/rediscache.client';
 import {
   Auth,
   configService,
@@ -24,15 +25,33 @@ import axios from 'axios';
 import compression from 'compression';
 import cors from 'cors';
 import express, { json, NextFunction, Request, Response, urlencoded } from 'express';
+import { Server as HttpServerNode } from 'http';
+import { Server as HttpsServerNode } from 'https';
 import { join } from 'path';
+
+type NetworkServer = HttpServerNode | HttpsServerNode;
 
 async function initWA() {
   await waMonitor.loadInstance();
 }
 
+function closeHttpServer(server: NetworkServer) {
+  return new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error && (error as NodeJS.ErrnoException).code !== 'ERR_SERVER_NOT_RUNNING') {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
 async function bootstrap() {
   const logger = new Logger('SERVER');
   const app = express();
+  let shuttingDown = false;
 
   let providerFiles: ProviderFiles = null;
   if (configService.get<ProviderSession>('PROVIDER').ENABLED) {
@@ -66,6 +85,10 @@ async function bootstrap() {
 
   app.get('/health/live', (_req, res) => res.status(HttpStatus.OK).json({ status: 'alive' }));
   app.get('/health/ready', async (_req, res) => {
+    if (shuttingDown) {
+      return res.status(HttpStatus.SERVICE_UNAVAILABLE).json({ status: 'unavailable' });
+    }
+
     try {
       await prismaRepository.$queryRaw`SELECT 1`;
       return res.status(HttpStatus.OK).json({ status: 'ready' });
@@ -146,7 +169,7 @@ async function bootstrap() {
   const httpServer = configService.get<HttpServer>('SERVER');
 
   ServerUP.app = app;
-  let server = ServerUP[httpServer.TYPE];
+  let server: NetworkServer = ServerUP[httpServer.TYPE];
 
   if (server === null) {
     logger.warn('SSL cert load failed — falling back to HTTP.');
@@ -170,6 +193,52 @@ async function bootstrap() {
   server.listen(httpServer.PORT, httpServer.HOST, () =>
     logger.log(httpServer.TYPE.toUpperCase() + ' - ON: ' + httpServer.HOST + ':' + httpServer.PORT),
   );
+
+  const shutdownTimeoutMs = Math.max(5000, Number.parseInt(process.env.SHUTDOWN_TIMEOUT_MS || '25000'));
+  const forceCloseAfterMs = Math.max(1000, shutdownTimeoutMs - 5000);
+
+  const shutdown = async (signal: NodeJS.Signals) => {
+    if (shuttingDown) {
+      logger.warn(`Shutdown already in progress after ${signal}`);
+      return;
+    }
+
+    shuttingDown = true;
+    logger.warn(`Graceful shutdown started after ${signal}`);
+
+    const forceCloseTimer = setTimeout(() => {
+      logger.warn('Forcing remaining HTTP connections to close');
+      server.closeAllConnections?.();
+    }, forceCloseAfterMs);
+    forceCloseTimer.unref();
+
+    const hardStopTimer = setTimeout(() => {
+      logger.error(`Graceful shutdown exceeded ${shutdownTimeoutMs}ms`);
+      process.exit(1);
+    }, shutdownTimeoutMs);
+    hardStopTimer.unref();
+
+    try {
+      await closeHttpServer(server);
+      await waMonitor.shutdown();
+      await eventManager.cleanup();
+      await providerFiles?.onModuleDestroy();
+      await redisClient.close();
+      await prismaRepository.onModuleDestroy();
+      await Sentry.close(2000);
+      logger.info('Graceful shutdown completed');
+      process.exit(0);
+    } catch (error) {
+      logger.error({ local: 'shutdown', error });
+      process.exit(1);
+    } finally {
+      clearTimeout(forceCloseTimer);
+      clearTimeout(hardStopTimer);
+    }
+  };
+
+  process.on('SIGINT', () => void shutdown('SIGINT'));
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
   initWA().catch((error) => {
     logger.error('Error loading instances: ' + error);
