@@ -64,6 +64,16 @@ async function bootstrap() {
     compression(),
   );
 
+  app.get('/health/live', (_req, res) => res.status(HttpStatus.OK).json({ status: 'alive' }));
+  app.get('/health/ready', async (_req, res) => {
+    try {
+      await prismaRepository.$queryRaw`SELECT 1`;
+      return res.status(HttpStatus.OK).json({ status: 'ready' });
+    } catch {
+      return res.status(HttpStatus.SERVICE_UNAVAILABLE).json({ status: 'unavailable' });
+    }
+  });
+
   app.set('view engine', 'hbs');
   app.set('views', join(ROOT_DIR, 'views'));
   app.use(express.static(join(ROOT_DIR, 'public')));
@@ -157,7 +167,9 @@ async function bootstrap() {
     Sentry.setupExpressErrorHandler(app);
   }
 
-  server.listen(httpServer.PORT, () => logger.log(httpServer.TYPE.toUpperCase() + ' - ON: ' + httpServer.PORT));
+  server.listen(httpServer.PORT, httpServer.HOST, () =>
+    logger.log(httpServer.TYPE.toUpperCase() + ' - ON: ' + httpServer.HOST + ':' + httpServer.PORT),
+  );
 
   initWA().catch((error) => {
     logger.error('Error loading instances: ' + error);

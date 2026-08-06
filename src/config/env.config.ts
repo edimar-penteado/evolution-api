@@ -6,6 +6,7 @@ dotenv.config();
 export type HttpServer = {
   NAME: string;
   TYPE: 'http' | 'https';
+  HOST: string;
   PORT: number;
   URL: string;
   DISABLE_DOCS: boolean;
@@ -458,6 +459,7 @@ export class ConfigService {
       SERVER: {
         NAME: process.env?.SERVER_NAME || 'evolution',
         TYPE: (process.env.SERVER_TYPE as 'http' | 'https') || 'http',
+        HOST: process.env.SERVER_HOST || (process.env.DOCKER_ENV === 'true' ? '0.0.0.0' : '127.0.0.1'),
         PORT: Number.parseInt(process.env.SERVER_PORT) || 8080,
         URL: process.env.SERVER_URL,
         DISABLE_DOCS: process.env?.SERVER_DISABLE_DOCS === 'true',
