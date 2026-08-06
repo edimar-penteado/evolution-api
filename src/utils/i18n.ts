@@ -4,7 +4,8 @@ import i18next from 'i18next';
 import path from 'path';
 
 const languages = ['en', 'pt-BR', 'es'];
-const translationsPath = path.join(__dirname, 'translations');
+const translationsDirectory = typeof __dirname === 'string' ? __dirname : path.join(process.cwd(), 'src', 'utils');
+const translationsPath = path.join(translationsDirectory, 'translations');
 const configService: ConfigService = new ConfigService();
 
 const resources: any = {};
