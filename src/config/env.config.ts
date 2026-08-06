@@ -313,7 +313,7 @@ export type Webhook = {
   };
 };
 export type Pusher = { ENABLED: boolean; GLOBAL?: GlobalPusher; EVENTS: EventsPusher };
-export type ConfigSessionPhone = { CLIENT: string; NAME: string };
+export type ConfigSessionPhone = { CLIENT: string; NAME: string; MESSAGES_INGEST_ENABLED: boolean };
 export type QrCode = { LIMIT: number; COLOR: string };
 export type Typebot = { ENABLED: boolean; API_VERSION: string; SEND_MEDIA_BASE64: boolean };
 export type Chatwoot = {
@@ -801,6 +801,7 @@ export class ConfigService {
       CONFIG_SESSION_PHONE: {
         CLIENT: process.env?.CONFIG_SESSION_PHONE_CLIENT || 'Evolution API',
         NAME: process.env?.CONFIG_SESSION_PHONE_NAME || 'Chrome',
+        MESSAGES_INGEST_ENABLED: process.env?.CONFIG_SESSION_PHONE_MESSAGES_INGEST_ENABLED !== 'false',
       },
       QRCODE: {
         LIMIT: Number.parseInt(process.env.QRCODE_LIMIT) || 30,

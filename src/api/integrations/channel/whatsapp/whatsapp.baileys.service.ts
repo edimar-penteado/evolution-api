@@ -250,6 +250,8 @@ export class BaileysStartupService extends ChannelStartupService {
   private readonly userDevicesCache: CacheStore = new NodeCache({ stdTTL: 300000, useClones: false });
   private endSession = false;
   private logBaileys = this.configService.get<Log>('LOG').BAILEYS;
+  private readonly messagesIngestEnabled =
+    this.configService.get<ConfigSessionPhone>('CONFIG_SESSION_PHONE').MESSAGES_INGEST_ENABLED;
   private eventProcessingQueue: Promise<void> = Promise.resolve();
 
   // Cache TTL constants (in seconds)
@@ -666,6 +668,10 @@ export class BaileysStartupService extends ChannelStartupService {
       qrTimeout: 45_000,
       emitOwnEvents: false,
       shouldIgnoreJid: (jid) => {
+        if (!this.messagesIngestEnabled) {
+          return true;
+        }
+
         if (this.localSettings.syncFullHistory && isJidGroup(jid)) {
           return false;
         }
@@ -676,9 +682,9 @@ export class BaileysStartupService extends ChannelStartupService {
 
         return isGroupJid || isBroadcast || isNewsletter;
       },
-      syncFullHistory: this.localSettings.syncFullHistory,
+      syncFullHistory: this.messagesIngestEnabled && this.localSettings.syncFullHistory,
       shouldSyncHistoryMessage: (msg: proto.Message.IHistorySyncNotification) => {
-        return this.historySyncNotification(msg);
+        return this.messagesIngestEnabled && this.historySyncNotification(msg);
       },
       cachedGroupMetadata: this.getGroupMetadataCache,
       userDevicesCache: this.userDevicesCache,
@@ -1916,12 +1922,12 @@ export class BaileysStartupService extends ChannelStartupService {
               this.instance.authState.saveCreds();
             }
 
-            if (events['messaging-history.set']) {
+            if (this.messagesIngestEnabled && events['messaging-history.set']) {
               const payload = events['messaging-history.set'];
               await this.messageHandle['messaging-history.set'](payload);
             }
 
-            if (events['messages.upsert']) {
+            if (this.messagesIngestEnabled && events['messages.upsert']) {
               const payload = events['messages.upsert'];
 
               // this.messageProcessor.processMessage(payload, settings);
