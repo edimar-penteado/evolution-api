@@ -94,78 +94,79 @@ export async function saveOnWhatsappCache(data: ISaveOnWhatsappCacheParams[]) {
 
       const expandedJids = baseJids.flatMap((jid) => getAvailableNumbers(jid));
 
-      // 1. Busca entrada por jidOptions e também remoteJid
-      // Às vezes acontece do remoteJid atual NÃO ESTAR no jidOptions ainda, ocasionando o erro:
-      // 'Unique constraint failed on the fields: (`remoteJid`)'
-      // Isso acontece principalmente em grupos que possuem o número do criador no ID (ex.: '559911223345-1234567890@g.us')
-      const existingRecord = await prismaRepository.isOnWhatsapp.findFirst({
+      const candidateRecords = await prismaRepository.isOnWhatsapp.findMany({
         where: {
-          OR: [
-            ...expandedJids.map((jid) => ({ jidOptions: { contains: jid } })),
-            { remoteJid: remoteJid }, // TODO: Descobrir o motivo que causa o remoteJid não estar (às vezes) incluso na lista de jidOptions
-          ],
+          OR: [...expandedJids.map((jid) => ({ jidOptions: { contains: jid } })), { remoteJid }],
         },
       });
+
+      const expandedJidsSet = new Set(expandedJids);
+      const relatedRecords = candidateRecords.filter(
+        (record) =>
+          record.remoteJid === remoteJid ||
+          record.jidOptions.split(',').some((jidOption) => expandedJidsSet.has(jidOption)),
+      );
+      const existingRecord = relatedRecords.find((record) => record.remoteJid === remoteJid) ?? relatedRecords[0];
 
       logger.verbose(
         `[saveOnWhatsappCache] Register exists for [${expandedJids.join(',')}]? => ${existingRecord ? existingRecord.remoteJid : 'Not found'}`,
       );
 
-      // 2. Unifica todos os JIDs usando um Set para garantir valores únicos
       const finalJidOptions = new Set(expandedJids);
 
       if (lidAltJid) {
         finalJidOptions.add(lidAltJid);
       }
 
-      if (existingRecord?.jidOptions) {
-        existingRecord.jidOptions.split(',').forEach((jid) => finalJidOptions.add(jid));
-      }
+      relatedRecords.forEach((record) => {
+        record.jidOptions.split(',').forEach((jid) => finalJidOptions.add(jid));
+      });
 
-      // 3. Prepara o payload final
-      // Ordena os JIDs para garantir consistência na string final
       const sortedJidOptions = [...finalJidOptions].sort();
       const newJidOptionsString = sortedJidOptions.join(',');
       const newLid = item.lid === 'lid' || item.remoteJid?.includes('@lid') ? 'lid' : null;
 
       const dataPayload = {
-        remoteJid: remoteJid,
+        remoteJid,
         jidOptions: newJidOptionsString,
         lid: newLid,
       };
 
-      // 4. Decide entre Criar ou Atualizar
       if (existingRecord) {
-        // Compara a string de JIDs ordenada existente com a nova
         const existingJidOptionsString = existingRecord.jidOptions
           ? existingRecord.jidOptions.split(',').sort().join(',')
           : '';
 
         const isDataSame =
-          existingRecord.remoteJid === dataPayload.remoteJid &&
           existingJidOptionsString === dataPayload.jidOptions &&
-          existingRecord.lid === dataPayload.lid;
+          existingRecord.lid === (dataPayload.lid ?? existingRecord.lid);
 
         if (isDataSame) {
           logger.verbose(`[saveOnWhatsappCache] Data for ${remoteJid} is already up-to-date. Skipping update.`);
           return; // Pula para o próximo item
         }
 
-        // Os dados são diferentes, então atualiza
         logger.verbose(
-          `[saveOnWhatsappCache] Register exists, updating: remoteJid=${remoteJid}, jidOptions=${dataPayload.jidOptions}, lid=${dataPayload.lid}`,
+          `[saveOnWhatsappCache] Register exists, updating aliases: remoteJid=${existingRecord.remoteJid}, jidOptions=${dataPayload.jidOptions}, lid=${dataPayload.lid ?? existingRecord.lid}`,
         );
         await prismaRepository.isOnWhatsapp.update({
           where: { id: existingRecord.id },
-          data: dataPayload,
+          data: {
+            jidOptions: dataPayload.jidOptions,
+            lid: dataPayload.lid ?? existingRecord.lid,
+          },
         });
       } else {
-        // Cria nova entrada
         logger.verbose(
           `[saveOnWhatsappCache] Register does not exist, creating: remoteJid=${remoteJid}, jidOptions=${dataPayload.jidOptions}, lid=${dataPayload.lid}`,
         );
-        await prismaRepository.isOnWhatsapp.create({
-          data: dataPayload,
+        await prismaRepository.isOnWhatsapp.upsert({
+          where: { remoteJid },
+          create: dataPayload,
+          update: {
+            jidOptions: dataPayload.jidOptions,
+            lid: dataPayload.lid,
+          },
         });
       }
     } catch (e) {
