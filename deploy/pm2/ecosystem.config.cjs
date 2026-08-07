@@ -42,6 +42,8 @@ module.exports = {
         DATABASE_SAVE_DATA_LABELS: 'false',
         DATABASE_SAVE_IS_ON_WHATSAPP: 'false',
         DATABASE_DELETE_MESSAGE: 'false',
+        CONFIG_SESSION_PHONE_CLIENT: 'SimpliWeb Lembretes',
+        CONFIG_SESSION_PHONE_NAME: 'Desktop',
         CONFIG_SESSION_PHONE_MESSAGES_INGEST_ENABLED: 'false',
         CACHE_REDIS_ENABLED: 'true',
         CACHE_REDIS_PREFIX_KEY: 'evolution-cache',
