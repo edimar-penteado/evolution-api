@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "ssm:GetParametersByPath",
+      "Resource": "arn:aws:ssm:sa-east-1:ACCOUNT_ID:parameter/simpliweb/prod/evolution/config/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "secretsmanager:GetSecretValue",
+      "Resource": [
+        "arn:aws:secretsmanager:sa-east-1:ACCOUNT_ID:secret:simpliweb/prod/evolution/runtime-*",
+        "arn:aws:secretsmanager:sa-east-1:ACCOUNT_ID:secret:simpliweb/prod/shared/evolution-auth-*"
+      ]
+    }
+  ]
+}

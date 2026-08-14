@@ -1,6 +1,8 @@
 import { isBooleanString } from 'class-validator';
 import dotenv from 'dotenv';
 
+import { validateRequiredSecrets } from './required-secrets';
+
 dotenv.config();
 
 export type HttpServer = {
@@ -446,6 +448,7 @@ export class ConfigService {
   }
 
   private loadEnv() {
+    validateRequiredSecrets();
     this.env = this.envProcess();
     this.env.PRODUCTION = process.env?.NODE_ENV === 'PROD';
     if (process.env?.DOCKER_ENV === 'true') {
@@ -852,7 +855,7 @@ export class ConfigService {
         },
         LOCAL: {
           ENABLED: process.env?.CACHE_LOCAL_ENABLED === 'true',
-          TTL: Number.parseInt(process.env?.CACHE_REDIS_TTL) || 86400,
+          TTL: Number.parseInt(process.env?.CACHE_LOCAL_TTL) || 86400,
         },
       },
       S3: {

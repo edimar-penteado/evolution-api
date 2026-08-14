@@ -10,6 +10,7 @@
     "start:prod": "node dist/main",
     "dev:server": "tsx watch ./src/main.ts",
     "test": "tsx watch ./test/all.test.ts",
+    "test:runtime-config": "tsx --test test/config/required-secrets.test.ts && node --test deploy/aws/render-runtime-env.test.cjs",
     "lint": "eslint --fix --ext .ts src",
     "lint:check": "eslint --ext .ts src",
     "commit": "cz",
