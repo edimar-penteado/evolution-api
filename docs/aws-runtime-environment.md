@@ -14,6 +14,8 @@ Production uses:
 
 The allowlist is `deploy/aws/runtime-env.schema.cjs`. Disabled integrations are intentionally absent and must be reviewed before adding their configuration or credentials.
 
+`CORS_ORIGIN` restricts requests carrying a browser Origin header. Requests without that header, including local health probes and the SimpliWeb backend integration, are accepted by the CORS middleware; API routes still require their existing authentication. Keep the explicit origin allowlist instead of switching to `*`. Run `npm run test:runtime-config` locally to validate this behavior before building the release.
+
 ## AWS and IAM
 
 Use the EC2 instance profile and no static AWS keys. Required policy resources:
@@ -25,7 +27,10 @@ Use the EC2 instance profile and no static AWS keys. Required policy resources:
     {
       "Effect": "Allow",
       "Action": "ssm:GetParametersByPath",
-      "Resource": "arn:aws:ssm:sa-east-1:ACCOUNT_ID:parameter/simpliweb/prod/evolution/config/*"
+      "Resource": [
+        "arn:aws:ssm:sa-east-1:ACCOUNT_ID:parameter/simpliweb/prod/evolution/config",
+        "arn:aws:ssm:sa-east-1:ACCOUNT_ID:parameter/simpliweb/prod/evolution/config/*"
+      ]
     },
     {
       "Effect": "Allow",
@@ -38,6 +43,8 @@ Use the EC2 instance profile and no static AWS keys. Required policy resources:
   ]
 }
 ```
+
+`GetParametersByPath` authorizes the requested path itself. Include the base path ARN as well as the descendant ARN; a resource ending only in `/config/*` does not match a request for `/config`.
 
 Add scoped `kms:Decrypt` only for a customer-managed KMS key. Populate every `configKeys` entry as an SSM `String`. The service secret JSON contains `DATABASE_CONNECTION_URI` and `CACHE_REDIS_URI`; the shared JSON contains `AUTHENTICATION_API_KEY`. Do not expose plaintext secrets through shell history.
 

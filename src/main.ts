@@ -7,6 +7,7 @@ import { PrismaRepository } from '@api/repository/repository.service';
 import { HttpStatus, router } from '@api/routes/index.router';
 import { eventManager, waMonitor } from '@api/server.module';
 import { redisClient } from '@cache/rediscache.client';
+import { isCorsOriginAllowed } from '@config/cors.config';
 import {
   Auth,
   configService,
@@ -67,10 +68,7 @@ async function bootstrap() {
     cors({
       origin(requestOrigin, callback) {
         const { ORIGIN } = configService.get<Cors>('CORS');
-        if (ORIGIN.includes('*')) {
-          return callback(null, true);
-        }
-        if (ORIGIN.indexOf(requestOrigin) !== -1) {
+        if (isCorsOriginAllowed(requestOrigin, ORIGIN)) {
           return callback(null, true);
         }
         return callback(new Error('Not allowed by CORS'));

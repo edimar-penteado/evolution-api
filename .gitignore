@@ -38,6 +38,7 @@ lerna-debug.log*
 !/test/config/
 /test/config/*
 !/test/config/required-secrets.test.ts
+!/test/config/cors.test.ts
 /src/env.yml
 /store
 *.env
