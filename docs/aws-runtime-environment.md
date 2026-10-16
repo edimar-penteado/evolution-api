@@ -16,6 +16,8 @@ The allowlist is `deploy/aws/runtime-env.schema.cjs`. Disabled integrations are 
 
 `CORS_ORIGIN` restricts requests carrying a browser Origin header. Requests without that header, including local health probes and the SimpliWeb backend integration, are accepted by the CORS middleware; API routes still require their existing authentication. Keep the explicit origin allowlist instead of switching to `*`. Run `npm run test:runtime-config` locally to validate this behavior before building the release.
 
+The production CommonJS bundle must use the named `makeWASocket` export from Baileys. A default import can resolve to the module namespace instead of the socket factory and fail during instance creation with `TypeError: ...default is not a function`. Rebuild with `npm run build` and publish the updated build artifact; changing only the TypeScript source does not update the running application.
+
 ## AWS and IAM
 
 Use the EC2 instance profile and no static AWS keys. Required policy resources:

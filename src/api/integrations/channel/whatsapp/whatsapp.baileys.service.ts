@@ -90,7 +90,7 @@ import useMultiFileAuthStatePrisma from '@utils/use-multi-file-auth-state-prisma
 import { AuthStateProvider } from '@utils/use-multi-file-auth-state-provider-files';
 import { useMultiFileAuthStateRedisDb } from '@utils/use-multi-file-auth-state-redis-db';
 import axios from 'axios';
-import makeWASocket, {
+import {
   AnyMessageContent,
   BufferedEventData,
   BufferJSON,
@@ -116,6 +116,7 @@ import makeWASocket, {
   isPnUser,
   jidNormalizedUser,
   makeCacheableSignalKeyStore,
+  makeWASocket,
   MessageUpsertType,
   MessageUserReceiptUpdate,
   MiscMessageGenerationOptions,
