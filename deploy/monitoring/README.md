@@ -2,9 +2,9 @@
 
 Este procedimento instala o monitoramento especifico da Evolution na EC2 de producao. Ele nao publica uma release, nao reinicia a Evolution e nao cria um canary. Usar a release ativa em `/srv/evolution-api/current`, o usuario Linux `simpliweb`, a regiao `sa-east-1` e um topico SNS com assinatura confirmada.
 
-O CloudWatch Agent coleta os logs. Separadamente, `evolution-pm2-metrics.timer` executa um publicador Node.js por minuto, consulta o processo PM2 `evolution-api` e envia `ProcessOnline`, `RestartCount` e `RestartDelta` para `SimpliWeb/Evolution`. O filtro de logs converte `WhatsApp connection closed` em `WhatsAppDisconnect`.
+O CloudWatch Agent coleta os logs, incluindo `WhatsApp connection closed`, sem criar filtro ou alarme para eventos de desconexao. Separadamente, `evolution-pm2-metrics.timer` executa um publicador Node.js por minuto, consulta o processo PM2 `evolution-api` e envia `ProcessOnline`, `RestartCount` e `RestartDelta` para `SimpliWeb/Evolution`.
 
-O monitoramento unificado do SimpliWeb publica metricas em `SimpliWeb/Operations`. Ele nao instala automaticamente este timer. Os tres alarmes deste runbook sao adicionais e parcialmente sobrepostos aos alarmes unificados; considerar os custos, mas nao mudar namespaces ou omitir alarmes sem revisar o planejamento.
+O monitoramento unificado do SimpliWeb publica metricas em `SimpliWeb/Operations`. Ele nao instala automaticamente este timer. Os dois alarmes de processo deste runbook sao adicionais e parcialmente sobrepostos aos alarmes unificados; considerar os custos, mas nao mudar namespaces ou omitir outros alarmes sem revisar o planejamento.
 
 ## Registro de conclusao
 
@@ -17,7 +17,7 @@ Em 2026-10-13, o responsavel confirmou a conclusao das etapas 1 a 10 e autorizou
 | Conferir release, instalar arquivos, units e agente | EC2, sessao SSM, como `ssm-user`, com `sudo` |
 | Consultar o PM2 e configurar sua rotacao | EC2, como `simpliweb`, sem PM2 executado como root |
 | Publicar metricas e coletar logs continuamente | Perfil IAM da EC2 |
-| Criar filtros/alarmes e testar notificacoes | AWS CloudShell, com identidade humana autorizada |
+| Criar alarmes e testar notificacoes | AWS CloudShell, com identidade humana autorizada |
 
 Os caminhos do console abaixo usam os nomes em portugues BR. As variaveis e os nomes de metricas permanecem em ingles porque sao identificadores tecnicos.
 
@@ -29,7 +29,7 @@ Em **EC2 > Instancias > instancia > Seguranca**, conferir o perfil IAM associado
 
 Preservar as permissoes existentes de SSM, runtime e backups. O exemplo de IAM no [runbook unificado](../../../simpliweb-server/deploy/operations/README.md) ja contempla `SimpliWeb/Evolution`. Nao conceder `PutMetricAlarm` ao perfil da EC2 apenas para facilitar o provisionamento.
 
-A identidade humana precisa de `cloudwatch:PutMetricAlarm`, `logs:PutMetricFilter` e `logs:PutRetentionPolicy`; para consulta/testes, tambem `logs:DescribeMetricFilters`, `cloudwatch:ListMetrics`, `cloudwatch:GetMetricData`, `cloudwatch:DescribeAlarms`, `cloudwatch:DescribeAlarmHistory`, `cloudwatch:SetAlarmState` e `sns:Publish`. Se o grupo de logs ainda nao existir, cria-lo com identidade autorizada em **CloudWatch > Logs > Grupos de logs**, com nome `/simpliweb/production/evolution-api` e retencao de 30 dias. SNS/KMS podem exigir permissoes adicionais.
+A identidade humana precisa de `cloudwatch:PutMetricAlarm` e `logs:PutRetentionPolicy`; para consulta/testes, tambem `cloudwatch:ListMetrics`, `cloudwatch:GetMetricData`, `cloudwatch:DescribeAlarms`, `cloudwatch:DescribeAlarmHistory`, `cloudwatch:SetAlarmState` e `sns:Publish`. Se o grupo de logs ainda nao existir, cria-lo com identidade autorizada em **CloudWatch > Logs > Grupos de logs**, com nome `/simpliweb/production/evolution-api` e retencao de 30 dias. SNS/KMS podem exigir permissoes adicionais. A retirada manual de filtros/alarmes antigos tem permissoes proprias no [procedimento de exclusao](../../../simpliweb-server/deploy/operations/README.md#61-retirada-dos-alarmes-de-desconexao-whatsapp).
 
 Nao configurar credenciais administrativas ou executar `aws login` na conta Linux da aplicacao. Nao mostrar API keys, arquivos de runtime, `pm2 env`, `printenv` ou a saida completa de `pm2 jlist`.
 
@@ -387,7 +387,7 @@ exit
 
 A configuracao conserva 14 arquivos compactados, roda diariamente e verifica tamanho a cada 30 segundos. `retain=14` significa quantidade de arquivos, nao garantia de 14 dias. Isso e independente da retencao de 30 dias no CloudWatch. Revisar os logs antes de centraliza-los; o agente nao remove dados pessoais ou secrets emitidos pela aplicacao.
 
-## 8. Criar os tres alarmes com identidade humana
+## 8. Criar os dois alarmes de processo com identidade humana
 
 Nao executar o provisionador como `simpliweb` esperando permissoes administrativas do perfil da EC2. No console, abrir **CloudShell**, usando a identidade autorizada da secao 1, na regiao Sao Paulo.
 
@@ -427,15 +427,9 @@ bash deploy/monitoring/configure-cloudwatch-alarms.sh
 echo "Codigo de saida: $?"
 ```
 
-Se o codigo nao for `0`, interromper e corrigir a falha. Codigo `0` e necessario, mas nao suficiente: o script nao tem resumo final e sua tentativa de criar o log group ignora erros. O grupo deve ter sido confirmado anteriormente. Conferir efetivamente filtro e alarmes:
+Se o codigo nao for `0`, interromper e corrigir a falha. Codigo `0` e necessario, mas nao suficiente: o script nao tem resumo final e sua tentativa de criar o log group ignora erros. O grupo deve ter sido confirmado anteriormente. Conferir efetivamente os alarmes:
 
 ```bash
-aws logs describe-metric-filters \
-  --region sa-east-1 \
-  --log-group-name /simpliweb/production/evolution-api \
-  --filter-name-prefix simpliweb-production-evolution \
-  --no-cli-pager
-
 aws cloudwatch describe-alarms \
   --region sa-east-1 \
   --alarm-name-prefix simpliweb-production-evolution- \
@@ -443,17 +437,24 @@ aws cloudwatch describe-alarms \
   --output table --no-cli-pager
 ```
 
-Esperado: filtro `simpliweb-production-evolution-whatsapp-disconnect`, namespace `SimpliWeb/Evolution` e estes alarmes:
+Esperado: somente estes dois alarmes com o prefixo consultado, no namespace `SimpliWeb/Evolution`, apos a retirada manual do alarme antigo:
 
 | Nome | Condicao |
 | --- | --- |
 | `simpliweb-production-evolution-process-offline` | `ProcessOnline < 1`, periodo de 5 minutos; ausencia de dados tratada como falha |
 | `simpliweb-production-evolution-restart` | Soma `RestartDelta > 0` em 5 minutos |
-| `simpliweb-production-evolution-whatsapp-disconnect` | Soma `WhatsAppDisconnect > 0` em 5 minutos |
 
-Todos devem ter a acao SNS correta habilitada. No console: **CloudWatch > Alarmes > Todos os alarmes**. Para o filtro: **CloudWatch > Logs > Grupos de logs > /simpliweb/production/evolution-api > Filtros de metricas**.
+Ambos devem ter a acao SNS correta habilitada. No console: **CloudWatch > Alarmes > Todos os alarmes**.
 
-O script pode ser repetido para atualizar os mesmos nomes apos corrigir uma falha. Ele nao remove o conjunto unificado nem instala o timer. Nao esperar necessariamente uma metrica `WhatsAppDisconnect` antes de haver logs correspondentes; ausencia e tratada como nao alarmante nesse alarme.
+O script pode ser repetido para atualizar os mesmos nomes apos corrigir uma falha. Ele nao remove recursos existentes, nao altera o conjunto unificado nem instala o timer.
+
+Os alarmes `simpliweb-production-whatsapp-disconnect` e `simpliweb-production-evolution-whatsapp-disconnect` e seus filtros foram retirados dos provisionadores. Um fechamento isolado pode ser esperado no onboarding, na desconexao voluntaria ou durante reconexao; nao comprova falha operacional. A nova release nao exclui esses recursos na AWS: seguir a [retirada manual dos dois alarmes e filtros](../../../simpliweb-server/deploy/operations/README.md#61-retirada-dos-alarmes-de-desconexao-whatsapp). Os logs, sua retencao, os timers e os demais alarmes permanecem ativos. Nao usar provisionadores antigos, que podem recriar os recursos.
+
+Validar localmente o provisionador com AWS simulada, sem acessar a conta:
+
+```bash
+node --test deploy/monitoring/configure-cloudwatch-alarms.test.cjs
+```
 
 ## 9. Testar notificacoes sem derrubar a Evolution
 
@@ -519,7 +520,7 @@ Revisar e remover informacoes sensiveis antes de compartilhar diagnosticos.
 - [x] Timer `enabled`/`active`, com pelo menos dois ciclos bem-sucedidos.
 - [x] Metricas recentes `ProcessName=evolution-api` em `SimpliWeb/Evolution`.
 - [x] Rotacao PM2 conferida sem reinstalar modulo existente.
-- [x] Filtro e tres alarmes reais conferidos.
+- [x] Filtro e tres alarmes da configuracao original conferidos em 2026-10-13; a retirada do alarme de desconexao do provisionamento nao comprova sua exclusao na AWS (ver secao 8).
 - [x] Teste SNS e notificacao gerada pelo alarme recebidos.
 - [x] Coleta unificada do host/SimpliWeb continua funcionando.
 
